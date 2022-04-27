@@ -6,19 +6,26 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-
+import java.io.File;
+import java.util.Collection;
+import javax.swing.Timer;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
 
 
@@ -51,6 +58,14 @@ public class SudokuGUI extends JFrame {
     // the current row and column we are potentially putting values into
     private int currentRow = -1;
     private int currentCol = -1;
+    
+    //hintRow and hintCol
+    private int hintrow=-1;
+    private int hintcol=-1;
+    
+    //show legal values
+    private boolean showLegalValues = false; 
+    
 
     
     // figuring out how big to make each button
@@ -62,9 +77,9 @@ public class SudokuGUI extends JFrame {
     private int height = DOUBLE_MARGIN_SIZE + squareSize * numRows;  
     
     // for lots of fun, too much fun really, try "Wingdings"
-    private static Font FONT = new Font("Verdana", Font.BOLD, 40);
+    private static Font FONT = new Font("Impact", Font.BOLD, 40);
     private static Color FONT_COLOR = Color.BLACK;
-    private static Color BACKGROUND_COLOR = Color.GRAY;
+    private static Color BACKGROUND_COLOR = Color.BLUE;
     
     // the canvas is a panel that gets drawn on
     private JPanel panel;
@@ -79,6 +94,7 @@ public class SudokuGUI extends JFrame {
     	public final int row;
     	public final int col;
     	public final Sudoku sudoku;
+    	private int count =0;
     	
     	MyKeyListener(int row, int col, Sudoku sudoku){
     		this.sudoku = sudoku;
@@ -94,6 +110,14 @@ public class SudokuGUI extends JFrame {
 				int digit = key - '0';
 				System.out.println(key);
 				if (currentRow == row && currentCol == col) {
+					if(!sudoku.isLegal(row, col, digit)) {
+						JOptionPane.showMessageDialog(null, String.format("%d cannot go in row %d and col %d", digit, row, col));
+						count++;
+						if(count==2) {
+							System.exit(0);
+						}
+					}
+				}else{
 					sudoku.set(row, col, digit);
 				}
 				update();
@@ -115,9 +139,11 @@ public class SudokuGUI extends JFrame {
 			//System.out.printf("row %d, col %d, %s\n", row, col, e);
 			JButton button = (JButton)e.getSource();
 			
+			
 			if (row == currentRow && col == currentCol) {
 				currentRow = -1;
 				currentCol = -1;
+				
 			} else if (sudoku.isBlank(row, col)) {
 				// we can try to enter a value in a 
 				currentRow = row;
@@ -131,20 +157,13 @@ public class SudokuGUI extends JFrame {
 			} else {
 				// TODO: error dialog letting the user know that they cannot enter values
 				// where a value has already been placed
-				JOptionPane.showMessageDialog(null, "Can't enter a value here");
 			}
 			
 			update();
 		}
     }
     
-    /**
-     * Put text into the given JButton
-     * 
-     * @param row
-     * @param col
-     * @param text
-     */
+    
     private void setText(int row, int col, String text) {
     	buttons[row][col].setText(text);
     }
@@ -153,10 +172,14 @@ public class SudokuGUI extends JFrame {
      * This is a private helper method that updates the GUI/view
      * to match any changes to the model
      */
+    
     private void update() {
     	for (int row=0; row<numRows; row++) {
     		for (int col=0; col<numCols; col++) {
-    			if (row == currentRow && col == currentCol && sudoku.isBlank(row, col)) {
+    			if (hintrow == row && hintcol == col) {
+    				buttons[row][col].setBackground(Color.orange);
+    				setText(row, col, "");
+    			} else if (row == currentRow && col == currentCol && sudoku.isBlank(row, col)) {
     				// draw this grid square special!
     				// this is the grid square we are trying to enter value into
     				buttons[row][col].setForeground(Color.RED);
@@ -164,6 +187,10 @@ public class SudokuGUI extends JFrame {
     				// Maybe I should have used JLabel instead of JButton?
     				buttons[row][col].setBackground(Color.CYAN);
     				setText(row, col, "_");
+    				if(showLegalValues) {
+    					Collection<Integer> legals = sudoku.getLegalValues(row,col);
+    					JOptionPane.showMessageDialog(null, legals.toString());
+    				}
     			} else {
     				buttons[row][col].setForeground(FONT_COLOR);
     				buttons[row][col].setBackground(BACKGROUND_COLOR);
@@ -179,6 +206,7 @@ public class SudokuGUI extends JFrame {
     	repaint();
     }
     
+    
 	
     private void createMenuBar() {
     	menuBar = new JMenuBar();
@@ -189,28 +217,31 @@ public class SudokuGUI extends JFrame {
     	JMenu file = new JMenu("File");
         menuBar.add(file);
         
-        // anonymous inner class
-        // basically, immediately create a class that implements actionlistener
-        // and then give it the given actionPerformed method.
         addToMenu(file, "New Game", new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 sudoku.load("easy1.txt");
-                update();
+                repaint();
             }
         });
         
         addToMenu(file, "Save", new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-            	// TODO: save the current game to a file!
-            	// HINT: Check the Util.java class for helpful methods
-            	// HINT: check out JFileChooser
-            	// https://docs.oracle.com/javase/tutorial/uiswing/components/filechooser.html
-            	JOptionPane.showMessageDialog(null,
-            		    "TODO: save the current game to a file!\n"
-            		    + "HINT: Check the Util.java class for helpful methods"
-            		    + "HINT: Check out JFileChooser");
+            	String board = sudoku.toFileString();
+            	
+            	JFileChooser jfc = new JFileChooser(new File("."));
+            	
+            	int returnValue = jfc.showSaveDialog(null);
+            	// int returnValue = jfc.showSaveDialog(null);
+            	
+            	if (returnValue == JFileChooser.APPROVE_OPTION) {
+            		File selectedFile = jfc.getSelectedFile();
+            		Util.writeToFile(selectedFile, board);
+            		JOptionPane.showMessageDialog(null, 
+                			"Saved game to file" + selectedFile.getAbsolutePath());
+            	}
+            	
                 update();
             }
         });
@@ -218,17 +249,23 @@ public class SudokuGUI extends JFrame {
         addToMenu(file, "Load", new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-            	// TODO: load a saved game from a file
-            	// HINT: Check the Util.java class for helpful methods
-            	// HINT: check out JFileChooser
-            	// https://docs.oracle.com/javase/tutorial/uiswing/components/filechooser.html
-            	JOptionPane.showMessageDialog(null,
-            		    "TODO: load a saved game from a file\n"
-            		    + "HINT: Check the Util.java class for helpful methods\n"
-            		    + "HINT: Check out JFileChooser");
+            	JFileChooser jfc = new JFileChooser(new File("."));
+            	
+            	int returnValue = jfc.showSaveDialog(null);
+            	// int returnValue = jfc.showSaveDialog(null);
+            	
+            	if (returnValue == JFileChooser.APPROVE_OPTION) {
+            		File selectedFile = jfc.getSelectedFile();
+            		sudoku.load(selectedFile);
+            		JOptionPane.showMessageDialog(null, 
+                			"Loaded game from file" + selectedFile.getAbsolutePath());
+            	}
+            	
                 update();
             }
         });
+        
+        
         
         //
         // Help menu
@@ -236,13 +273,56 @@ public class SudokuGUI extends JFrame {
         JMenu help = new JMenu("Help");
         menuBar.add(help);
         
+        // anonymous inner class: create a subclass of ActionListener with the given method
+        // that will override the inherited actionPerfeformed() method
         addToMenu(help, "Hint", new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				for (int r = 0; r < 9; r++) {
+					for (int c = 0; c < 9; c++) {
+						if (sudoku.isBlank(r, c) && sudoku.getLegalValues(r, c).size() == 1) {
+							hintrow = r;
+							hintcol = c;
+							update();
+							return;
+        }
+					}
+				}
 				JOptionPane.showMessageDialog(null, "Give the user a hint! Highlight the most constrained square\n" + 
 						"which is the square where the fewest posssible values can go");
 			}
 		});
+        
+        
+        JMenuItem menuItem = new JCheckBoxMenuItem("Show Legals");
+        help.add(menuItem);
+        menuItem.addItemListener(new ItemListener() {
+        	@Override
+        	public void itemStateChanged(ItemEvent e) {
+        		showLegalValues = !showLegalValues;
+        	}
+        });
+        
+        
+        JMenuItem menuItem1 = new JCheckBoxMenuItem("Overwhelmed Music Suggestion");
+        help.add(menuItem1);
+        menuItem1.addItemListener(new ItemListener() {
+        	@Override
+        	public void itemStateChanged(ItemEvent e) {
+        		JOptionPane.showMessageDialog(null,  "Play 'Time After Time' by Cyndi Lauper");
+        	}
+        	
+        	
+        });
+        
+        JMenuItem menuItem2 = new JCheckBoxMenuItem("Feeling like a Champ Music Suggestion");
+        help.add(menuItem2);
+        menuItem2.addItemListener(new ItemListener() {
+        	@Override
+        	public void itemStateChanged(ItemEvent e) {
+        		JOptionPane.showMessageDialog(null,  "Play 'Wake Me Up Before You Go-Go' by Wham!");
+        	}
+        });
         
         this.setJMenuBar(menuBar);
     }
@@ -310,7 +390,6 @@ public class SudokuGUI extends JFrame {
         		b.setFont(FONT);
         		b.setForeground(FONT_COLOR);
         		b.setBackground(BACKGROUND_COLOR);
-        		b.setOpaque(true);
         		buttons[r][c] = b;
         		// add the button to the canvas
         		// the layout manager (the 9x9 GridLayout from a few lines earlier)
